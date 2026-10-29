@@ -1,0 +1,7 @@
+.git
+/data
+/build
+*.o
+.DS_Store
+README.md
+docker-compose.yml

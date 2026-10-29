@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in &mdash; idaas</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--fg:#e6e9ef;--muted:#8b93a7;--acc:#4f8cff;--err:#ff6b6b;--line:#262b36}
+*{box-sizing:border-box;margin:0}
+body{font:15px/1.5 system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}
+main{width:100%;max-width:360px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:32px}
+h1{font-size:18px;font-weight:600;margin-bottom:4px}
+p.sub{color:var(--muted);font-size:13px;margin-bottom:24px;word-break:break-word}
+label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px}
+input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:#0c0e13;color:var(--fg);font-size:15px}
+input:focus{outline:2px solid var(--acc);border-color:transparent}
+button{width:100%;margin-top:24px;padding:11px;border:0;border-radius:8px;background:var(--acc);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+button:hover{filter:brightness(1.1)}
+.err{background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.35);color:var(--err);border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:16px}
+.err:empty{display:none}
+footer{margin-top:20px;text-align:center;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Sign in</h1>
+  <p class="sub">{{SUB}}</p>
+  <div class="err">{{ERROR}}</div>
+  <form method="post" action="/login" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{CSRF}}">
+    <label for="username">Username</label>
+    <input id="username" name="username" required autofocus autocomplete="username" spellcheck="false">
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" required autocomplete="current-password">
+    <button type="submit">Sign in</button>
+  </form>
+  <footer>idaas &middot; Linux account login</footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,40 @@
+# idaas example deployment.
+#
+# The container ONLY receives mounts originating under ./data — never the
+# host's live /etc. The ./data volume is writable on purpose: idaas persists
+# its RSA signing keys there (that is its only write location).
+#
+# Before the first start:
+#   1. make sync-users        (snapshots /etc/{passwd,shadow,group} into ./data/etc)
+#   2. edit ./data/clients.conf   (created from clients.example.conf)
+#
+# After re-syncing users, restart the container: single-file bind mounts
+# keep pointing at the previous file version until restarted.
+
+services:
+  idaas:
+    build: .
+    image: idaas:latest
+    container_name: idaas
+    ports:
+      - "127.0.0.1:8080:8080"          # put TLS in front of this (reverse proxy)
+    environment:
+      IDAAS_ISSUER: "https://sso.example.com"   # external URL as seen by apps
+      IDAAS_EMAIL_DOMAIN: "example.com"
+      IDAAS_CLIENTS_FILE: "/data/clients.conf"
+      # IDAAS_TRUST_PROXY: "1"         # set when a proxy sends X-Forwarded-For
+      # IDAAS_LOG_LEVEL: "info"        # debug | info | warn | error
+      # Admin API gate (Postfix "mynetworks" style CIDR allowlist;
+      # unset = admin API completely disabled):
+      # IDAAS_ADMIN_NETWORKS: "127.0.0.0/8,192.168.1.0/24"
+      # IDAAS_ADMIN_TOKEN: "change-me-long-random"   # bearer second factor
+    volumes:
+      - ./data:/data                    # writable: signing keys, clients.conf
+      - ./data/etc/passwd:/etc/passwd:ro
+      - ./data/etc/shadow:/etc/shadow:ro
+      - ./data/etc/group:/etc/group:ro
+    cap_drop: [ALL]                     # plain file read on shadow needs no caps for uid 0
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 128m
+    restart: unless-stopped

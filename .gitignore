@@ -1,0 +1,12 @@
+# build artifacts
+/build/
+*.o
+
+# runtime data: user snapshots (password hashes!), signing keys, clients.conf.
+# never commit anything under data/
+/data/
+
+# local tooling state
+.zcode/
+
+.DS_Store

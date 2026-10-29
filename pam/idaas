@@ -1,0 +1,5 @@
+# idaas PAM policy (baked into the image).
+# pam_unix authenticates against the passwd/shadow snapshots mounted
+# read-only at /etc from ./data/etc on the host.
+auth     required  pam_unix.so
+account  required  pam_unix.so
