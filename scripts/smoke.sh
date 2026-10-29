@@ -10,6 +10,7 @@ set -eu
 
 IMAGE="${IMAGE:-idaas:test}"
 NAME="${NAME:-idaas-smoke}"
+# CI sets SMOKE_SKIP_BUILD=1 when the test image was built by a previous step
 PORT="${PORT:-18080}"
 B="http://127.0.0.1:$PORT"
 REDIR="http://127.0.0.1:$PORT/callback"
@@ -48,8 +49,12 @@ login_get_code() {
     printf '%s\n' "$_loc"
 }
 
-step "building test image"
-docker build --target test -t "$IMAGE" . || fail "image build"
+if [ "${SMOKE_SKIP_BUILD:-0}" != "1" ]; then
+    step "building test image"
+    docker build --target test -t "$IMAGE" . || fail "image build"
+else
+    step "using prebuilt test image $IMAGE"
+fi
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 step "starting container"

@@ -1,5 +1,7 @@
 # idaas
 
+[![docker](https://github.com/tayyebi/idaas/actions/workflows/docker.yml/badge.svg)](https://github.com/tayyebi/idaas/actions/workflows/docker.yml)
+
 A minimal OpenID Connect provider written in C — with one difference: **by
 default it has no user database**. Its users are the machine's Linux
 accounts, verified through PAM (`pam_unix`), so every hash scheme your host
@@ -51,8 +53,16 @@ On the Linux host that owns the accounts (needs `sudo` once, to read
 ```sh
 make sync-users        # snapshots /etc/{passwd,shadow,group} into ./data/etc
 $EDITOR data/clients.conf   # created from clients.example.conf
-docker compose up -d --build
+docker compose up -d   # pulls ghcr.io/tayyebi/idaas:latest (see note below)
 ```
+
+The compose file runs the published image from GHCR with
+`pull_policy: always`, so `docker compose up -d` (or `make update`) always
+runs the newest version. Note: new GHCR packages start **private** — after
+the first CI push, make the package public once (GitHub → Packages →
+idaas → Package settings), or `docker login ghcr.io` with a token that has
+`read:packages` on every deployment host. To run a locally built image
+instead: `IDAAS_IMAGE=idaas:latest docker compose up -d`.
 
 Optionally enable the admin API (for idaas-local "managed" users) by
 uncommenting `IDAAS_ADMIN_NETWORKS` / `IDAAS_ADMIN_TOKEN` in
@@ -247,13 +257,20 @@ host.
 ## Development
 
 ```sh
-make docker-build    # build the runtime image
+make docker-build    # build the runtime image locally (tag: idaas)
 make docker-test     # run the unit + PAM tests inside the docker "test" stage
 make docker-smoke    # full end-to-end flow against fixture users (in docker),
                      # including the admin API and a managed-user lifecycle
-make run             # docker compose up
+make run             # docker compose up (pulls ghcr.io/tayyebi/idaas:latest)
+make update          # docker compose pull && up -d — refresh to newest image
 make sync-users      # snapshot host accounts into ./data (sudo)
 ```
+
+**CI** (`.github/workflows/docker.yml`): every PR and push builds the test
+stage (unit + PAM tests run at build time) and runs the full smoke test.
+Pushes to `main` publish `ghcr.io/tayyebi/idaas:latest` (plus a `sha-…`
+tag) for `linux/amd64` and `linux/arm64`; `v*` tags additionally publish
+version tags (`1.2.3`, `1.2`).
 
 The plain `make` targets (`all`, `unit`, `pamtest`) are what the Docker
 stages run; they need `gcc`, `libssl-dev`, `libpam0g-dev`,

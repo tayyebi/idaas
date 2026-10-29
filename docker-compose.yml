@@ -1,8 +1,12 @@
 # idaas example deployment.
 #
+# Runs the published image from GHCR and always pulls the latest version
+# on `docker compose up` (pull_policy: always). To run a locally built
+# image instead:  IDAAS_IMAGE=idaas:latest docker compose up -d
+#
 # The container ONLY receives mounts originating under ./data — never the
 # host's live /etc. The ./data volume is writable on purpose: idaas persists
-# its RSA signing keys there (that is its only write location).
+# its RSA signing keys and managed-user store there (its only writes).
 #
 # Before the first start:
 #   1. make sync-users        (snapshots /etc/{passwd,shadow,group} into ./data/etc)
@@ -10,11 +14,14 @@
 #
 # After re-syncing users, restart the container: single-file bind mounts
 # keep pointing at the previous file version until restarted.
+#
+# To update to the newest published image:
+#   docker compose pull && docker compose up -d
 
 services:
   idaas:
-    build: .
-    image: idaas:latest
+    image: ${IDAAS_IMAGE:-ghcr.io/tayyebi/idaas:latest}
+    pull_policy: always
     container_name: idaas
     ports:
       - "127.0.0.1:8080:8080"          # put TLS in front of this (reverse proxy)

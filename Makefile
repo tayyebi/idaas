@@ -20,7 +20,7 @@ UNIT_OBJS := $(addprefix $(BUILD)/,$(addsuffix .o,$(UNIT_SRCS)))
 # test_pam.c has its own main() and is built by the separate pamtest target
 UNIT_TEST_SRCS := $(filter-out tests/test_pam.c,$(wildcard tests/test_*.c))
 
-.PHONY: all clean unit pamtest docker-build docker-test docker-smoke run sync-users
+.PHONY: all clean unit pamtest docker-build docker-test docker-smoke run update sync-users
 
 all: $(BUILD)/idaas
 
@@ -65,8 +65,15 @@ docker-test:
 docker-smoke:
 	sh scripts/smoke.sh
 
+# compose pulls ghcr.io/<owner>/idaas:latest by default; IDAAS_IMAGE=... overrides
 run:
-	docker compose up -d --build
+	docker compose pull || true
+	docker compose up -d
+
+# force-refresh to the newest published image
+update:
+	docker compose pull
+	docker compose up -d
 
 # Snapshot /etc/{passwd,shadow,group} into ./data/etc (reads host /etc,
 # writes only inside ./data). Needs root to read /etc/shadow.
