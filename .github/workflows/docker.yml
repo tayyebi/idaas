@@ -13,9 +13,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# NOTE: keep these names distinct from scripts/smoke.sh's IMAGE variable,
+# which the smoke step relies on (workflow env leaks into step shells).
 env:
   REGISTRY: ghcr.io
-  IMAGE: ghcr.io/${{ github.repository }}
+  REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
 
 permissions:
   contents: read
@@ -62,7 +64,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE }}
+          images: ${{ env.REGISTRY_IMAGE }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=semver,pattern={{version}}
