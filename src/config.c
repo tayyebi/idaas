@@ -75,21 +75,24 @@ int config_from_env(config *c)
     return 0;
 }
 
-static int add_redirect(oauth_client *cl, const char *uri)
+/* Appends a validated absolute URI to one of a client's URI lists; the
+   same shape serves redirect_uri and post_logout_redirect_uri. */
+static int add_uri(char **uris, size_t *n, size_t max, const char *key,
+                   const char *client_id, const char *uri)
 {
-    if (cl->n_redirects >= MAX_REDIRECTS) {
-        LOG_WARN("client '%s': too many redirect_uri entries (max %d)", cl->id, MAX_REDIRECTS);
+    if (*n >= max) {
+        LOG_WARN("client '%s': too many %s entries (max %zu)", client_id, key, max);
         return -1;
     }
     if (!uri || !*uri || strlen(uri) >= 500 ||
         (strncmp(uri, "http://", 7) != 0 && strncmp(uri, "https://", 8) != 0)) {
-        LOG_WARN("client '%s': ignoring invalid redirect_uri", cl->id);
+        LOG_WARN("client '%s': ignoring invalid %s", client_id, key);
         return -1;
     }
-    cl->redirect_uris[cl->n_redirects] = strdup(uri);
-    if (!cl->redirect_uris[cl->n_redirects])
+    uris[*n] = strdup(uri);
+    if (!uris[*n])
         return -1;
-    cl->n_redirects++;
+    (*n)++;
     return 0;
 }
 
@@ -164,7 +167,12 @@ int config_load_clients(config *c)
                 }
                 snprintf(cl->secret, sizeof cl->secret, "%s", v);
             } else if (strcmp(k, "redirect_uri") == 0) {
-                if (add_redirect(cl, v))
+                if (add_uri(cl->redirect_uris, &cl->n_redirects, MAX_REDIRECTS,
+                            "redirect_uri", cl->id, v))
+                    bad = 1;
+            } else if (strcmp(k, "post_logout_redirect_uri") == 0) {
+                if (add_uri(cl->post_logout_uris, &cl->n_post_logout, MAX_REDIRECTS,
+                            "post_logout_redirect_uri", cl->id, v))
                     bad = 1;
             } else if (strcmp(k, "scope") == 0) {
                 if (!*v || strlen(v) >= sizeof cl->scope)
@@ -235,6 +243,24 @@ int config_redirect_registered(const config *c, const char *uri)
 {
     for (size_t i = 0; i < c->n_clients; i++)
         if (client_redirect_ok(&c->clients[i], uri))
+            return 1;
+    return 0;
+}
+
+int client_post_logout_ok(const oauth_client *c, const char *uri)
+{
+    if (!uri)
+        return 0;
+    for (size_t i = 0; i < c->n_post_logout; i++)
+        if (strcmp(c->post_logout_uris[i], uri) == 0)
+            return 1;
+    return 0;
+}
+
+int config_post_logout_registered(const config *c, const char *uri)
+{
+    for (size_t i = 0; i < c->n_clients; i++)
+        if (client_post_logout_ok(&c->clients[i], uri))
             return 1;
     return 0;
 }

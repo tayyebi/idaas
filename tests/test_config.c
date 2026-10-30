@@ -42,6 +42,7 @@ int test_config(void)
             "secret = s3cr3t-value\n"
             "redirect_uri = https://a.example/cb\n"
             "redirect_uri = https://a.example/cb2\n"
+            "post_logout_redirect_uri = https://a.example/signed-out\n"
             "scope = openid email\n"
             "\n"
             "[pub]\n"
@@ -57,15 +58,20 @@ int test_config(void)
     CHECK(client_redirect_ok(app, "https://a.example/cb") == 1);
     CHECK(client_redirect_ok(app, "https://a.example/cb2") == 1);
     CHECK(client_redirect_ok(app, "https://evil.example/cb") == 0);
+    CHECK(client_post_logout_ok(app, "https://a.example/signed-out") == 1);
+    CHECK(client_post_logout_ok(app, "https://a.example/cb") == 0); /* separate list */
     CHECK(scope_subset("openid", app->scope) == 1);
 
     const oauth_client *pub = config_find_client(&c, "pub");
     CHECK(pub != NULL);
     CHECK(client_is_public(pub) == 1);
+    CHECK(client_post_logout_ok(pub, "http://localhost:9/cb") == 0); /* none registered */
 
     CHECK(config_find_client(&c, "nope") == NULL);
     CHECK(config_redirect_registered(&c, "http://localhost:9/cb") == 1);
     CHECK(config_redirect_registered(&c, "https://evil.example/x") == 0);
+    CHECK(config_post_logout_registered(&c, "https://a.example/signed-out") == 1);
+    CHECK(config_post_logout_registered(&c, "https://a.example/cb") == 0); /* authorize target ≠ logout target */
 
     unlink(path);
     return fails;

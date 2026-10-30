@@ -228,7 +228,9 @@ int handle_logout(http_req *r)
 
     const char *ppru = req_param(r, "post_logout_redirect_uri");
     const char *state = req_param(r, "state");
-    if (ppru && *ppru && config_redirect_registered(&g_cfg, ppru)) {
+    /* Only registered per-client post_logout_redirect_uri entries bounce
+       the browser back; anything else gets the plain signed-out page. */
+    if (ppru && *ppru && config_post_logout_registered(&g_cfg, ppru)) {
         sbuf loc;
         if (sbuf_init(&loc, 512) == 0) {
             sbuf_adds(&loc, ppru);

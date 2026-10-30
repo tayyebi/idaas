@@ -141,8 +141,15 @@ Environment variables (`IDAAS_*`):
 [my-app]
 secret = long-random-string     # or the bare flag `public` (PKCE required)
 redirect_uri = https://my-app.example.com/oauth/callback
+post_logout_redirect_uri = https://my-app.example.com/signed-out   # optional
 scope = openid profile email groups
 ```
+
+`redirect_uri` may appear multiple times; both URI lists are matched
+exactly. `post_logout_redirect_uri` entries are the only targets
+RP-initiated logout (`/logout?post_logout_redirect_uri=…`) will bounce
+the browser back to — a registered `redirect_uri` is deliberately NOT
+accepted there; without a match the user simply gets the signed-out page.
 
 ## Managed users & the admin API
 

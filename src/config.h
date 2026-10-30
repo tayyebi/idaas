@@ -12,6 +12,8 @@ typedef struct oauth_client {
     char scope[256];
     char *redirect_uris[MAX_REDIRECTS];
     size_t n_redirects;
+    char *post_logout_uris[MAX_REDIRECTS]; /* RP-initiated logout targets */
+    size_t n_post_logout;
 } oauth_client;
 
 typedef struct config {
@@ -39,5 +41,7 @@ const oauth_client *config_find_client(const config *c, const char *id);
 int client_is_public(const oauth_client *c);
 int client_redirect_ok(const oauth_client *c, const char *uri);
 int config_redirect_registered(const config *c, const char *uri);
+int client_post_logout_ok(const oauth_client *c, const char *uri);
+int config_post_logout_registered(const config *c, const char *uri);
 
 #endif
