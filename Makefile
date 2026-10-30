@@ -15,7 +15,7 @@ SRCS     := $(wildcard $(SRC)/*.c)
 OBJS     := $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(SRCS))
 
 # subset linked into the unit-test binary (no MHD, no main)
-UNIT_SRCS := b64 rnd util log jsonw store jwt jwt_verify config users session managed
+UNIT_SRCS := b64 rnd util log jsonw store jwt jwt_verify config users session accounts managed
 UNIT_OBJS := $(addprefix $(BUILD)/,$(addsuffix .o,$(UNIT_SRCS)))
 # test_pam.c has its own main() and is built by the separate pamtest target
 UNIT_TEST_SRCS := $(filter-out tests/test_pam.c,$(wildcard tests/test_*.c))
@@ -28,8 +28,8 @@ $(BUILD):
 	mkdir -p $@
 
 # HTML pages are embedded into a generated header at build time
-$(BUILD)/pages.h: web/login.html web/error.html scripts/embed.sh | $(BUILD)
-	sh scripts/embed.sh $@ PAGE_LOGIN=web/login.html PAGE_ERROR=web/error.html
+$(BUILD)/pages.h: web/login.html web/error.html web/choose.html scripts/embed.sh | $(BUILD)
+	sh scripts/embed.sh $@ PAGE_LOGIN=web/login.html PAGE_ERROR=web/error.html PAGE_CHOOSE=web/choose.html
 
 $(BUILD)/%.o: $(SRC)/%.c $(BUILD)/pages.h | $(BUILD)
 	$(CC) $(CFLAGS) -I$(SRC) -I$(BUILD) -c $< -o $@

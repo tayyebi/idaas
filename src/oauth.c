@@ -5,6 +5,8 @@
 #include <time.h>
 
 #include "ctx.h"
+#include "accounts.h"
+#include "choose.h"
 #include "login.h"
 #include "log.h"
 #include "rnd.h"
@@ -64,6 +66,25 @@ int oauth_issue_code(http_req *r, const authorize_req *a)
     int rc = res_redirect(r, loc.s);
     sbuf_free(&loc);
     return rc;
+}
+
+int oauth_pending_req(const session *s, const char *username, time_t auth_time,
+                      const char *sid, authorize_req *out)
+{
+    const oauth_client *cl = config_find_client(&g_cfg, s->p_client);
+    if (!cl || !client_redirect_ok(cl, s->p_redirect))
+        return -1;
+    memset(out, 0, sizeof *out);
+    out->client = cl;
+    out->redirect_uri = s->p_redirect;
+    out->scope = s->p_scope;
+    out->state = s->p_state;
+    out->nonce = s->p_nonce;
+    out->challenge = s->p_challenge;
+    out->username = username;
+    out->auth_time = auth_time;
+    out->sid = sid;
+    return 0;
 }
 
 int handle_authorize(http_req *r)
@@ -135,21 +156,9 @@ int handle_authorize(http_req *r)
                                   "Session error.");
     }
 
-    if (s.authenticated && s.username[0]) {
-        authorize_req arq;
-        memset(&arq, 0, sizeof arq);
-        arq.client = cl;
-        arq.redirect_uri = ruri;
-        arq.scope = granted;
-        arq.state = state ? state : "";
-        arq.nonce = nonce;
-        arq.challenge = ch;
-        arq.username = s.username;
-        arq.auth_time = s.auth_time;
-        arq.sid = tok;
-        return oauth_issue_code(r, &arq);
-    }
-
+    /* The request always stops at an interstitial page so the user explicitly
+     * confirms which account continues — even with a single logged-in
+     * account. The pending request travels inside the session. */
     s.has_pending = 1;
     snprintf(s.p_client, sizeof s.p_client, "%s", cl->id);
     snprintf(s.p_redirect, sizeof s.p_redirect, "%s", ruri);
@@ -158,5 +167,13 @@ int handle_authorize(http_req *r)
     snprintf(s.p_nonce, sizeof s.p_nonce, "%s", nonce);
     snprintf(s.p_challenge, sizeof s.p_challenge, "%s", ch);
     session_save(g_sessions, g_cfg.session_abs_s, tok, &s);
+
+    req_cookie_kv kv[IDAAS_MAX_ACCOUNTS];
+    size_t nkv = req_cookies_prefix(r, ACCT_COOKIE_PREFIX, kv, IDAAS_MAX_ACCOUNTS);
+    account_entry accts[IDAAS_MAX_ACCOUNTS];
+    int n = accounts_collect(kv, nkv, g_sessions, g_cfg.session_idle_s, tok, &s,
+                             accts, IDAAS_MAX_ACCOUNTS);
+    if (n > 0)
+        return choose_render_page(r, &s, accts, n, NULL);
     return login_render_page(r, &s, NULL);
 }

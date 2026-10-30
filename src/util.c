@@ -199,6 +199,29 @@ int url_decode(const char *in, size_t n, char *out, size_t outsz)
     return 0;
 }
 
+/* ---------- HTML escaping ---------- */
+
+char *html_escape(const char *s)
+{
+    size_t n = s ? strlen(s) : 0;
+    char *out = malloc(6 * n + 1);
+    if (!out)
+        return NULL;
+    size_t o = 0;
+    for (size_t i = 0; i < n; i++) {
+        switch (s[i]) {
+        case '&':  memcpy(out + o, "&amp;", 5);  o += 5; break;
+        case '<':  memcpy(out + o, "&lt;", 4);   o += 4; break;
+        case '>':  memcpy(out + o, "&gt;", 4);   o += 4; break;
+        case '"':  memcpy(out + o, "&quot;", 6); o += 6; break;
+        case '\'': memcpy(out + o, "&#39;", 5);  o += 5; break;
+        default:   out[o++] = s[i];
+        }
+    }
+    out[o] = 0;
+    return out;
+}
+
 /* ---------- misc ---------- */
 
 char *str_trim(char *s)

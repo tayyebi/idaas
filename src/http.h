@@ -15,6 +15,18 @@ const char *req_form(http_req *r, const char *name);
 const char *req_param(http_req *r, const char *name); /* query, then form */
 const char *req_header(http_req *r, const char *name);
 const char *req_cookie(http_req *r, const char *name);
+
+/* One parsed request cookie (names/values copied, safe past the request). */
+typedef struct req_cookie_kv {
+    char name[64];
+    char value[256];
+} req_cookie_kv;
+
+/* Copy up to max cookies whose name starts with prefix into out.
+ * Returns how many were copied. */
+size_t req_cookies_prefix(http_req *r, const char *prefix,
+                          req_cookie_kv *out, size_t max);
+
 const char *req_method(http_req *r);   /* "GET", "POST", ... */
 const char *req_peer_ip(http_req *r);  /* peer (or X-Forwarded-For) address */
 

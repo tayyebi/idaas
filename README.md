@@ -45,6 +45,28 @@ Deliberately small and modern:
 Not supported (on purpose): implicit/hybrid flows, device flow, consent
 screen (all registered clients are first-party).
 
+## Sign-in flow & the account chooser
+
+`/authorize` never signs a user in silently — the flow always stops at an
+explicit confirmation page:
+
+1. **No signed-in accounts** → the login form (Linux account or managed
+   user, PAM-verified).
+2. **One or more remembered accounts** → the **account chooser**. Every
+   account signed in on this browser is listed — with a single account too,
+   so it is confirmed rather than assumed — plus a **"Use another account"**
+   link to the login form. Picking an account mints the code and redirects
+   back to the application; signing in as a new account does the same right
+   after login.
+
+Accounts stay signed in side by side: each login sets a per-account cookie
+(`idaas_acct_<hash>`) alongside the active-session cookie `idaas_sid`, and
+the chooser lists them all. Remembered accounts idle out on the same
+`IDAAS_SESSION_IDLE` clock (background accounts are validated read-only, so
+listing them never keeps them alive), expire with `IDAAS_SESSION_ABS`, and
+are capped at 5 per browser. `/logout` signs out **only the active
+account** — the other remembered accounts stay on the chooser.
+
 ## Quick start
 
 On the Linux host that owns the accounts (needs `sudo` once, to read
@@ -231,8 +253,11 @@ the token.
   and refresh tokens are stored keyed by their SHA-256; CSRF tokens and
   client secrets are compared in constant time.
 - **Session hygiene**: HttpOnly `SameSite=Lax` cookies (with `Secure` when
-  the issuer is HTTPS), session-id rotation at login, CSRF-protected login
-  form, idle + absolute expiry.
+  the issuer is HTTPS), a brand-new session token at every login (fixation
+  defense that still leaves the previously active account's session alive),
+  CSRF-protected login and account-chooser forms, idle + absolute expiry.
+  The chooser accepts an account only when the browser's own cookies prove
+  its session — a forged or cross-site form cannot name someone else's.
 - **PKCE everywhere**: public clients must use S256; codes are single-use,
   60-second TTL, bound to client + redirect_uri + challenge.
 - **Hardened container**: all capabilities dropped, `no-new-privileges`,
@@ -283,7 +308,7 @@ The plain `make` targets (`all`, `unit`, `pamtest`) are what the Docker
 stages run; they need `gcc`, `libssl-dev`, `libpam0g-dev`,
 `libmicrohttpd-dev` if you insist on building outside Docker.
 
-Project layout: `src/*.c` (one module per concern), `web/` (login/error
+Project layout: `src/*.c` (one module per concern), `web/` (login/choose/error
 pages, embedded at build time via `scripts/embed.sh`), `tests/` (assert-based
 unit tests + PAM integration test with fixture users created inside the
 image), `pam/idaas` (PAM policy baked into the image).

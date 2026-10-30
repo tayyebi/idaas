@@ -8,6 +8,7 @@
 
 #include "config.h"
 #include "ctx.h"
+#include "accounts.h"
 #include "log.h"
 #include "managed.h"
 #include "oauth.h"
@@ -184,27 +185,39 @@ int handle_login_post(http_req *r)
     n.authenticated = 1;
     snprintf(n.username, sizeof n.username, "%s", username);
     n.auth_time = time(NULL);
+
+    /* A brand-new token (never the pre-auth one) keeps the fixation defense;
+     * the old session is left intact so a remembered account that was active
+     * before this login keeps its session and stays on the chooser. */
     char ntok[SESSION_TOKEN_BUF];
-    if (session_rotate(g_sessions, g_cfg.session_abs_s, ck, &n, ntok) != 0)
+    if (session_fresh(g_sessions, g_cfg.session_abs_s, &n, ntok) != 0)
         return res_error_page(r, MHD_HTTP_INTERNAL_SERVER_ERROR, "Server error",
                               "Session error.");
+    s.has_pending = 0; /* the pending request travels with the new session */
+    session_save(g_sessions, g_cfg.session_abs_s, ck, &s);
     res_set_cookie(r, SESSION_COOKIE, ntok, g_cfg.session_abs_s,
                    g_cfg.cookie_secure, 1, "Lax");
 
+    /* Remember the account on this browser unless the cap is exhausted. */
+    req_cookie_kv kv[IDAAS_MAX_ACCOUNTS];
+    size_t nkv = req_cookies_prefix(r, ACCT_COOKIE_PREFIX, kv, IDAAS_MAX_ACCOUNTS);
+    account_entry accts[IDAAS_MAX_ACCOUNTS];
+    int naccts = accounts_collect(kv, nkv, g_sessions, g_cfg.session_idle_s, ck, &s,
+                                  accts, IDAAS_MAX_ACCOUNTS);
+    int remembered = 0;
+    for (int i = 0; i < naccts; i++)
+        if (strcmp(accts[i].username, username) == 0)
+            remembered = 1;
+    if (remembered || naccts < IDAAS_MAX_ACCOUNTS) {
+        char cname[32];
+        acct_cookie_name(cname, username);
+        res_set_cookie(r, cname, ntok, g_cfg.session_abs_s,
+                       g_cfg.cookie_secure, 1, "Lax");
+    }
+
     if (n.has_pending) {
-        const oauth_client *cl = config_find_client(&g_cfg, n.p_client);
-        if (cl && client_redirect_ok(cl, n.p_redirect)) {
-            authorize_req arq;
-            memset(&arq, 0, sizeof arq);
-            arq.client = cl;
-            arq.redirect_uri = n.p_redirect;
-            arq.scope = n.p_scope;
-            arq.state = n.p_state;
-            arq.nonce = n.p_nonce;
-            arq.challenge = n.p_challenge;
-            arq.username = n.username;
-            arq.auth_time = n.auth_time;
-            arq.sid = ntok;
+        authorize_req arq;
+        if (oauth_pending_req(&n, n.username, n.auth_time, ntok, &arq) == 0) {
             n.has_pending = 0;
             session_save(g_sessions, g_cfg.session_abs_s, ntok, &n);
             return oauth_issue_code(r, &arq);
@@ -220,11 +233,20 @@ int handle_logout(http_req *r)
 {
     const char *ck = req_cookie(r, SESSION_COOKIE);
     session s;
-    if (ck && session_snap(g_sessions, g_cfg.session_idle_s, ck, &s) == 0 && s.authenticated)
+    char who[64] = "";
+    if (ck && session_snap(g_sessions, g_cfg.session_idle_s, ck, &s) == 0 && s.authenticated) {
         log_audit("logout", s.username, req_peer_ip(r), "success", NULL);
+        snprintf(who, sizeof who, "%s", s.username);
+    }
     if (ck)
         session_destroy(g_sessions, ck);
     res_set_cookie(r, SESSION_COOKIE, "", 0, g_cfg.cookie_secure, 1, "Lax");
+    /* only the active account is signed out; other remembered accounts stay */
+    if (who[0]) {
+        char cname[32];
+        acct_cookie_name(cname, who);
+        res_set_cookie(r, cname, "", 0, g_cfg.cookie_secure, 1, "Lax");
+    }
 
     const char *ppru = req_param(r, "post_logout_redirect_uri");
     const char *state = req_param(r, "state");

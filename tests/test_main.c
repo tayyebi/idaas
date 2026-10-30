@@ -7,6 +7,7 @@ int test_store(void);
 int test_config(void);
 int test_jwt(void);
 int test_managed(void);
+int test_accounts(void);
 
 int main(void)
 {
@@ -18,6 +19,7 @@ int main(void)
     fails += test_config();
     fails += test_jwt();
     fails += test_managed();
+    fails += test_accounts();
     if (fails)
         printf("FAILED: %d check(s)\n", fails);
     else

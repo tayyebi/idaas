@@ -30,11 +30,15 @@ typedef struct session {
 int  session_start(store *st, long abs_ttl_s, char token_out[SESSION_TOKEN_BUF]);
 /* Fetch a snapshot; fails if missing/idle-expired/absolutely expired. */
 int  session_snap(store *st, long idle_ttl_s, const char *token, session *out);
+/* Like snap, but read-only: does not refresh last_seen, so peeking at
+ * background (remembered) accounts never keeps them alive. */
+int  session_peek(store *st, long idle_ttl_s, const char *token, session *out);
 int  session_save(store *st, long abs_ttl_s, const char *token, const session *s);
-/* Rotate the session id (fixation defense): stores *s under a new token and
- * removes the old one; fills new_token and refreshes s->csrf. */
-int  session_rotate(store *st, long abs_ttl_s, const char *old_token,
-                    session *s, char new_token[SESSION_TOKEN_BUF]);
+/* Store *proto under a brand-new token with a fresh csrf, leaving any old
+ * session untouched (unlike rotate) — used on login so the previously active
+ * remembered account keeps its session. */
+int  session_fresh(store *st, long abs_ttl_s, const session *proto,
+                   char token_out[SESSION_TOKEN_BUF]);
 void session_destroy(store *st, const char *token);
 
 #endif

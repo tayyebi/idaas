@@ -30,6 +30,18 @@ int session_start(store *st, long abs_ttl_s, char token_out[SESSION_TOKEN_BUF])
 
 int session_snap(store *st, long idle_ttl_s, const char *token, session *out)
 {
+    if (session_peek(st, idle_ttl_s, token, out) != 0)
+        return -1;
+    char key[65];
+    key_for(token, key);
+    session touched = *out;
+    touched.last_seen = time(NULL);
+    store_put(st, key, &touched, sizeof touched, touched.abs_exp);
+    return 0;
+}
+
+int session_peek(store *st, long idle_ttl_s, const char *token, session *out)
+{
     if (!token || !*token)
         return -1;
     char key[65];
@@ -41,9 +53,6 @@ int session_snap(store *st, long idle_ttl_s, const char *token, session *out)
         store_del(st, key);
         return -1;
     }
-    session touched = *out;
-    touched.last_seen = now;
-    store_put(st, key, &touched, sizeof touched, touched.abs_exp);
     return 0;
 }
 
@@ -55,23 +64,19 @@ int session_save(store *st, long abs_ttl_s, const char *token, const session *s)
     return store_put(st, key, s, sizeof *s, s->abs_exp);
 }
 
-int session_rotate(store *st, long abs_ttl_s, const char *old_token,
-                   session *s, char new_token[SESSION_TOKEN_BUF])
+int session_fresh(store *st, long abs_ttl_s, const session *proto,
+                  char token_out[SESSION_TOKEN_BUF])
 {
-    if (rnd_token(new_token, 32) || rnd_token(s->csrf, 24))
+    session n = *proto;
+    if (rnd_token(token_out, 32) || rnd_token(n.csrf, 24))
         return -1;
     time_t now = time(NULL);
-    s->last_seen = now;
-    s->abs_exp = now + abs_ttl_s;
+    n.created = now;
+    n.last_seen = now;
+    n.abs_exp = now + abs_ttl_s;
     char key[65];
-    key_for(new_token, key);
-    if (store_put(st, key, s, sizeof *s, s->abs_exp))
-        return -1;
-    if (old_token && *old_token) {
-        key_for(old_token, key);
-        store_del(st, key);
-    }
-    return 0;
+    key_for(token_out, key);
+    return store_put(st, key, &n, sizeof n, n.abs_exp);
 }
 
 void session_destroy(store *st, const char *token)

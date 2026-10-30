@@ -28,6 +28,9 @@ int secret_eq(const char *a, const char *b);            /* length-independent, h
 char *url_encode(const char *s);                        /* caller frees */
 int   url_decode(const char *in, size_t n, char *out, size_t outsz); /* '+' and %XX */
 
+/* HTML entity escaping (& < > " '). Caller frees. */
+char *html_escape(const char *s);
+
 /* In-place whitespace trim, returns s. */
 char *str_trim(char *s);
 

@@ -166,6 +166,108 @@ CODE4=$(curl -s -o /dev/null -w '%{http_code}' -u smoke-conf:WRONG -X POST \
     "$B/token")
 [ "$CODE4" = "401" ] || fail "bad secret accepted ($CODE4)"
 
+# ---- account chooser (the jar $J still remembers alice) ----
+
+step "re-authorize with a signed-in account shows the chooser"
+CHOOSER=$(curl -sf -b "$J" -c "$J" --get \
+    --data-urlencode "response_type=code" \
+    --data-urlencode "client_id=smoke-app" \
+    --data-urlencode "redirect_uri=$REDIR" \
+    --data-urlencode "scope=openid profile email groups" \
+    --data-urlencode "state=choose1" \
+    --data-urlencode "nonce=n-choose1" \
+    --data-urlencode "code_challenge=$CHALLENGE" \
+    --data-urlencode "code_challenge_method=S256" \
+    "$B/authorize") || fail "authorize request"
+echo "$CHOOSER" | grep -q 'action="/choose"' || fail "chooser page"
+echo "$CHOOSER" | grep -q 'name="acct" value="alice"' || fail "alice not listed"
+echo "$CHOOSER" | grep -q 'Use another account' || fail "other-account link"
+CCSRF=$(printf '%s' "$CHOOSER" | sed -n 's/.*name="csrf" value="\([^"]*\)".*/\1/p' | head -1)
+[ -n "$CCSRF" ] || fail "chooser csrf extraction"
+
+step "confirming the signed-in account mints a code"
+LOC=$(curl -sf -b "$J" -c "$J" -o /dev/null -D - -X POST \
+    --data "acct=alice&csrf=$CCSRF" "$B/choose" \
+    | sed -n 's/^[Ll]ocation: //p' | tr -d '\r' | head -1) || fail "choose request"
+case "$LOC" in
+    "$REDIR"?code=*) ;;
+    *) fail "no code redirect after choose (got: $LOC)" ;;
+esac
+echo "$LOC" | grep -q 'state=choose1' || fail "state missing after choose"
+
+step "choose with a bad csrf is rejected"
+S=$(curl -s -o /dev/null -w '%{http_code}' -b "$J" -X POST \
+    --data "acct=alice&csrf=WRONG" "$B/choose")
+[ "$S" = "403" ] || fail "choose with bad csrf accepted ($S)"
+
+step "second account via 'use another account' gets a code"
+CHOOSER2=$(curl -sf -b "$J" -c "$J" --get \
+    --data-urlencode "response_type=code" \
+    --data-urlencode "client_id=smoke-app" \
+    --data-urlencode "redirect_uri=$REDIR" \
+    --data-urlencode "scope=openid profile email groups" \
+    --data-urlencode "state=choose2" \
+    --data-urlencode "nonce=n-choose2" \
+    --data-urlencode "code_challenge=$CHALLENGE" \
+    --data-urlencode "code_challenge_method=S256" \
+    "$B/authorize") || fail "authorize request"
+echo "$CHOOSER2" | grep -q 'name="acct" value="alice"' || fail "alice not listed"
+LOGIN2=$(curl -sf -b "$J" -c "$J" "$B/login") || fail "login page"
+LCSRF=$(printf '%s' "$LOGIN2" | sed -n 's/.*name="csrf" value="\([^"]*\)".*/\1/p' | head -1)
+[ -n "$LCSRF" ] || fail "login csrf extraction"
+LOCB=$(curl -sf -b "$J" -c "$J" -o /dev/null -D - -X POST \
+    --data "username=bob&password=bob-pass-2&csrf=$LCSRF" "$B/login" \
+    | sed -n 's/^[Ll]ocation: //p' | tr -d '\r' | head -1) || fail "bob login"
+case "$LOCB" in
+    "$REDIR"?code=*) ;;
+    *) fail "bob: no code redirect (got: $LOCB)" ;;
+esac
+echo "$LOCB" | grep -q 'state=choose2' || fail "bob: state missing"
+
+step "chooser lists both remembered accounts"
+CHOOSER3=$(curl -sf -b "$J" -c "$J" --get \
+    --data-urlencode "response_type=code" \
+    --data-urlencode "client_id=smoke-app" \
+    --data-urlencode "redirect_uri=$REDIR" \
+    --data-urlencode "scope=openid profile email groups" \
+    --data-urlencode "state=choose3" \
+    --data-urlencode "nonce=n-choose3" \
+    --data-urlencode "code_challenge=$CHALLENGE" \
+    --data-urlencode "code_challenge_method=S256" \
+    "$B/authorize") || fail "authorize request"
+echo "$CHOOSER3" | grep -q 'name="acct" value="bob"' || fail "bob not listed"
+echo "$CHOOSER3" | grep -q 'name="acct" value="alice"' || fail "alice not listed"
+CCSRF3=$(printf '%s' "$CHOOSER3" | sed -n 's/.*name="csrf" value="\([^"]*\)".*/\1/p' | head -1)
+[ -n "$CCSRF3" ] || fail "chooser csrf extraction"
+
+step "choosing an unremembered account is refused"
+OUT=$(curl -sf -b "$J" -X POST --data "acct=eve&csrf=$CCSRF3" "$B/choose") \
+    || fail "choose request"
+echo "$OUT" | grep -q 'no longer signed in' || fail "unknown account accepted"
+
+step "choosing the non-active account issues a code for it"
+LOCA=$(curl -sf -b "$J" -c "$J" -o /dev/null -D - -X POST \
+    --data "acct=alice&csrf=$CCSRF3" "$B/choose" \
+    | sed -n 's/^[Ll]ocation: //p' | tr -d '\r' | head -1) || fail "choose request"
+case "$LOCA" in
+    "$REDIR"?code=*) ;;
+    *) fail "no code redirect for chosen account (got: $LOCA)" ;;
+esac
+echo "$LOCA" | grep -q 'state=choose3' || fail "state missing for chosen account"
+CA=${LOCA#*code=}
+CA=${CA%%&*}
+RESPA=$(curl -sf -X POST \
+    --data-urlencode "grant_type=authorization_code" \
+    --data-urlencode "client_id=smoke-app" \
+    --data-urlencode "code=$CA" \
+    --data-urlencode "redirect_uri=$REDIR" \
+    --data-urlencode "code_verifier=$VERIFIER" \
+    "$B/token") || fail "token exchange for chosen account"
+ATA=$(printf '%s' "$RESPA" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+[ -n "$ATA" ] || fail "access token for chosen account"
+UIA=$(curl -sf -H "Authorization: Bearer $ATA" "$B/userinfo") || fail "userinfo for chosen account"
+echo "$UIA" | grep -q '"sub":"alice"' || fail "chosen account did not get the code"
+
 # ---- admin API (mynetworks gate + token) and managed users ----
 
 step "admin api: refused without token"

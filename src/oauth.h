@@ -38,4 +38,11 @@ struct auth_code {
 
 int oauth_issue_code(http_req *r, const authorize_req *a);
 
+/* Build an authorize_req from the session's stashed pending request, for the
+ * given end user. Returns -1 when the pending client/redirect is no longer
+ * registered. username/auth_time/sid are borrowed and only need to outlive
+ * the oauth_issue_code() call. */
+int oauth_pending_req(const session *s, const char *username, time_t auth_time,
+                      const char *sid, authorize_req *out);
+
 #endif

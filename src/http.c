@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 
 #include "admin.h"
+#include "choose.h"
 #include "ctx.h"
 #include "discovery.h"
 #include "jsonw.h"
@@ -78,6 +79,35 @@ const char *req_header(http_req *r, const char *name)
 const char *req_cookie(http_req *r, const char *name)
 {
     return MHD_lookup_connection_value(r->conn, MHD_COOKIE_KIND, name);
+}
+
+struct cookie_scan {
+    const char *prefix;
+    req_cookie_kv *out;
+    size_t max, n;
+};
+
+static enum MHD_Result cookie_scan_cb(void *cls, enum MHD_ValueKind kind,
+                                      const char *key, const char *value)
+{
+    (void)kind;
+    struct cookie_scan *cs = cls;
+    if (!key || !value || cs->n >= cs->max)
+        return MHD_YES;
+    if (strncmp(key, cs->prefix, strlen(cs->prefix)) != 0)
+        return MHD_YES;
+    snprintf(cs->out[cs->n].name, sizeof cs->out[cs->n].name, "%s", key);
+    snprintf(cs->out[cs->n].value, sizeof cs->out[cs->n].value, "%s", value);
+    cs->n++;
+    return MHD_YES;
+}
+
+size_t req_cookies_prefix(http_req *r, const char *prefix,
+                          req_cookie_kv *out, size_t max)
+{
+    struct cookie_scan cs = { prefix, out, max, 0 };
+    MHD_get_connection_values(r->conn, MHD_COOKIE_KIND, cookie_scan_cb, &cs);
+    return cs.n;
 }
 
 const char *req_method(http_req *r)
@@ -265,6 +295,7 @@ static const struct route ROUTES[] = {
     {"/.well-known/webfinger", "GET", handle_webfinger},
     {"/authorize", "GET", handle_authorize},
     {"/authorize", "POST", handle_authorize},
+    {"/choose", "POST", handle_choose_post},
     {"/login", "GET", handle_login_get},
     {"/login", "POST", handle_login_post},
     {"/logout", "GET", handle_logout},
